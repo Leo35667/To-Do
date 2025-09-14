@@ -156,7 +156,8 @@
                 border: 1px solid rgba(255,255,255,.1);
                 border-radius: 10px;
                 padding: 8px 10px;
-                color: var(--text)
+                color: var(--text);
+                font-size: 16px
             }
 
             .quick-add button {
@@ -310,7 +311,8 @@
             color: var(--text);
             border-radius: 10px;
             padding: 8px 10px;
-            height: 38px
+            height: 38px;
+            font-size: 16px
         }
 
         .weekday-group {
@@ -373,7 +375,8 @@
                 border: 1px solid rgba(255,255,255,.1);
                 border-radius: 10px;
                 padding: 8px 10px;
-                color: var(--text)
+                color: var(--text);
+                font-size: 16px
             }
 
             .shop-quick button {
@@ -502,7 +505,8 @@
                 border: 1px solid rgba(255,255,255,.1);
                 border-radius: 10px;
                 padding: 8px 10px;
-                color: var(--text)
+                color: var(--text);
+                font-size: 16px
             }
 
             .notes-quick button {
@@ -575,10 +579,8 @@
             min-height: auto
         }
 
-        /* Einkaufsmodus */
-        body.shop-only .grid,
-        body.shop-only #rec-panel,
-        body.shop-only #notes-panel {
+        /* Einkaufsmodus: nur Einkaufsliste zeigen (ohne Schnellauswahl) */
+        body.shop-only .grid, body.shop-only #rec-panel, body.shop-only #notes-panel {
             display: none !important
         }
 
@@ -628,34 +630,29 @@
             font-size: 16px
         }
 
-        .quick-add input, .shop-quick input, .notes-quick input {
-            font-size: 16px
-        }
-
-        /* 📱 NEU: Mobile-Layout für „Wiederholende Aufgaben“ */
+        /* 📱 Mobile-Layout: „Wiederholende Aufgaben“ stapeln */
         @media (max-width:650px) {
             #rec-controls {
-                display: flex;
-                flex-direction: column;
-                gap: 10px
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 10px !important;
             }
 
                 #rec-controls > * {
-                    flex: 1 1 auto;
-                    width: 100%
+                    flex: 0 0 auto !important;
+                    width: 100% !important
+                }
+
+                #rec-controls .input-dark,
+                #rec-controls .select-dark,
+                #rec-controls .btn {
+                    width: 100% !important
                 }
 
             #rec-days {
-                width: 100%;
-                justify-content: flex-start
-            }
-
-            #rec-controls .btn {
-                width: 100%
-            }
-
-            #rec-controls .select-dark, #rec-controls .input-dark {
-                width: 100%
+                width: 100% !important;
+                justify-content: flex-start !important
             }
         }
     </style>
@@ -665,7 +662,7 @@
         <div class="container">
             <h1 id="app-title" contenteditable="true" title="Titel bearbeiten">🗂️ Leo To-Do Listen</h1>
             <div class="header-actions">
-                <button id="undo-top-btn" class="icon-btn" title="Rückgängig (zuletzt entfernt)" disabled aria-label="Rückgängig">↩️</button>
+                <button id="undo-top-btn" class="icon-btn" title="Rückgängig" disabled aria-label="Rückgängig">↩️</button>
             </div>
         </div>
     </header>
@@ -693,6 +690,7 @@
         </div>
     </div>
 
+    <!-- Wiederholende Aufgaben -->
     <section class="panel" id="rec-panel">
         <div class="panel-head" id="rec-toggle">
             <h3 style="margin:0">🔁 Wiederholende Aufgaben</h3>
@@ -721,6 +719,7 @@
         </div>
     </section>
 
+    <!-- Einkaufsliste -->
     <section class="panel" id="shop-panel">
         <div class="panel-head" id="shop-toggle">
             <h3 style="margin:0">🛒 Einkaufsliste</h3>
@@ -744,6 +743,7 @@
         </div>
     </section>
 
+    <!-- Notizboard -->
     <section class="panel" id="notes-panel">
         <div class="panel-head" id="notes-toggle">
             <h3 style="margin:0">🗒️ Notizboard</h3>
@@ -755,6 +755,7 @@
     </section>
 
     <script>
+/* ========== Helpers & State ========== */
 const $$ = s=>document.querySelector(s);
 const $all = s=>Array.from(document.querySelectorAll(s));
 const todayStr = ()=> new Date().toISOString().slice(0,10);
@@ -809,8 +810,6 @@ const store={
 
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 function escapeHtml(s){ return String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c])); }
-
-/* Helpers */
 function ensureNotesCols(n){
   if(!store.notes || !Array.isArray(store.notes.cols)) store.notes={cols:[],items:[],colStates:{}};
   const count = store.notes.cols.length;
@@ -822,7 +821,7 @@ function ensureNotesCols(n){
   }
 }
 
-/* Tasks */
+/* ========== Tasks & UI ========== */
 function addTask({title,column,dueAt=null,templateId=null,targetDate=null}){
   if(!title || !title.trim()) return;
   store.tasks.push({id:uid(),title:title.trim(),column,createdAt:Date.now(),dueAt,templateId,targetDate});
@@ -837,7 +836,8 @@ function animateAndThen(el, fn){
 
 function taskNode(task){
   const el=document.createElement('div'); el.className='task'; el.draggable=true; el.dataset.id=task.id;
-  el.innerHTML=`<input type="checkbox"> <div class="title">${escapeHtml(task.title)}</div> ${task.dueAt?`<span class='due'>(${task.dueAt})</span>`:''}`;
+  const dueTxt = task.dueAt ? ` (${task.dueAt})` : '';
+  el.innerHTML=`<input type="checkbox"> <div class="title">${escapeHtml(task.title)}</div> ${task.dueAt?`<span class='due'>${escapeHtml(dueTxt)}</span>`:''}`;
   const cb=el.querySelector('input');
   cb.addEventListener('change',()=>{
     cb.disabled=true;
@@ -876,7 +876,7 @@ function updateUndoUI(){
   btn.classList.toggle('active', hasUndo);
 }
 
-/* DnD tasks */
+/* Drag & Drop for task columns */
 function makeSortable(list,col){
   list.addEventListener('dragover',e=>{
     e.preventDefault();
@@ -906,7 +906,7 @@ function getDragAfter(container,y){
   return closest;
 }
 
-/* Render */
+/* Render whole app */
 function render(){
   const titleEl=$$('#app-title'); if(titleEl) titleEl.textContent = store.appTitle;
 
@@ -924,7 +924,7 @@ function render(){
   updateUndoUI();
 }
 
-/* Quick add */
+/* Quick add per column */
 $all('.column').forEach(col=>{
   const qIn=col.querySelector('.quick-add input'); const qBtn=col.querySelector('.quick-add button'); const column=col.dataset.col;
   if(!qIn || !qBtn) return;
@@ -942,7 +942,7 @@ $all('.column').forEach(col=>{
   qIn.addEventListener('keydown',e=>{ if(e.key==='Enter') add(); });
 });
 
-/* Recurring */
+/* ========== Recurring Templates ========== */
 function renderRecs(){
   const wrap=$$('#recs'); if(!wrap) return; wrap.innerHTML='';
   if(store.recs.length===0){ const p=document.createElement('p'); p.className='muted'; p.textContent='Noch keine Vorlagen.'; wrap.appendChild(p); return; }
@@ -950,8 +950,7 @@ function renderRecs(){
     const tag = r.freq==='daily' ? 'täglich' : 'wöchentlich ('+(r.weekdays||[]).map(weekdayName).join(', ')+')';
     const el=document.createElement('div'); el.className='rec-item';
     el.innerHTML = `<div style="flex:1">${escapeHtml(r.title)} <span class="muted">• ${tag}</span></div><button class="btn" style="padding:6px 10px" title="Vorlage löschen">🗑️</button>`;
-    const delBtn = el.querySelector('button');
-    delBtn.addEventListener('click',()=>{ removeRec(r.id); });
+    el.querySelector('button').addEventListener('click',()=>{ removeRec(r.id); });
     wrap.appendChild(el);
   }
 }
@@ -963,6 +962,7 @@ function addRec({title,freq,weekdays=[]}){
   store.recs.push(rec);
   const todayKey = todayStr();
   const tomoKey  = tomorrowStr();
+  // create instances right away for today/tomorrow if due
   if(rec.freq==='daily' || (rec.freq==='weekly' && (rec.weekdays||[]).map(Number).includes(new Date().getDay()))){
     maybeCreateInstance(rec, todayKey);
   }
@@ -998,11 +998,12 @@ function generateRecurring(force=false){
   }
 }
 
-/* 00:01 Rollover */
+/* 00:01 Rollover Morgen->Heute (einmal täglich) */
 function rolloverIfNeeded(force){
-  const now = new Date(); const todayKey = todayStr();
+  const now = new Date();
+  const todayKey = todayStr();
   const minutes = now.getHours()*60 + now.getMinutes();
-  const eligible = force || minutes >= 1;
+  const eligible = force || minutes >= 1; // ab 00:01
   if(eligible && store.lastRollover !== todayKey){
     let moved = 0;
     for(const t of store.tasks){ if(t.column==='tomorrow'){ t.column='today'; moved++; } }
@@ -1011,24 +1012,14 @@ function rolloverIfNeeded(force){
   }
 }
 
-/* Shopping */
+/* ========== Shopping List ========== */
 function renderShop(){
   if(!Array.isArray(store.shopPalette) || store.shopPalette.length===0){
     store.shopPalette = ['Bananen','Äpfel','Milch','Eier','Brot','Butter','Käse','Tomaten','Gurken','Kartoffeln','Zwiebeln','Nudeln','Reis','Öl','Salz','Pfeffer','Joghurt','Müsli','Kaffee','Tee'];
     store.save();
   }
-  const list=$$('#shop-list');
-  if(list){
-    list.innerHTML='';
-    store.shopItems.forEach(it=> list.appendChild(shopItemNode(it)));
-    makeSortableShop(list);
-  }
-  const pal=$$('#shop-palette');
-  if(pal){
-    pal.innerHTML='';
-    store.shopPalette.forEach(name=> pal.appendChild(paletteChip(name)));
-    makeSortablePalette(pal);
-  }
+  const list=$$('#shop-list'); if(list){ list.innerHTML=''; store.shopItems.forEach(it=> list.appendChild(shopItemNode(it)) ); makeSortableShop(list); }
+  const pal=$$('#shop-palette'); if(pal){ pal.innerHTML=''; store.shopPalette.forEach(name=> pal.appendChild(paletteChip(name)) ); makeSortablePalette(pal); }
   applyShopCollapseUI();
 }
 function shopItemNode(it){
@@ -1099,7 +1090,7 @@ function makeSortablePalette(container){
   });
 }
 
-/* Notes */
+/* ========== Notes (8 Spalten) ========== */
 function renderNotes(){
   const grid=$$('#notes-grid'); if(!grid) return;
   grid.innerHTML='';
@@ -1196,7 +1187,7 @@ function makeSortableNotes(list, colId){
   });
 }
 
-/* Collapse UI */
+/* ========== Collapse Controls ========== */
 function applyCollapseUI(){
   const panel=$$('#rec-panel'); const body=$$('#rec-body');
   if(store.recsCollapsed){ panel.classList.remove('open'); body.style.display='none'; }
@@ -1218,7 +1209,7 @@ function applyNotesCollapseUI(){
 }
 function toggleNotesCollapse(){ store.notesCollapsed=!store.notesCollapsed; store.save(); applyNotesCollapseUI(); }
 
-/* Shop-only */
+/* Shop-only mode */
 function applyShopOnlyUI(){
   document.body.classList.toggle('shop-only', store.shopOnly);
   const btn=$$('#toggle-shop-only');
@@ -1229,7 +1220,7 @@ function applyShopOnlyUI(){
 }
 function toggleShopOnly(){ store.shopOnly = !store.shopOnly; store.save(); applyShopOnlyUI(); }
 
-/* Header-Title editing */
+/* Title editing */
 function wireAppTitle(){
   const el=$$('#app-title');
   if(!el) return;
@@ -1241,7 +1232,7 @@ function wireAppTitle(){
   });
 }
 
-/* Wiring */
+/* ========== Wiring ========== */
 $$('#rec-toggle').addEventListener('click',toggleCollapse);
 $$('#rec-toggle-btn').addEventListener('click',e=>{ e.stopPropagation(); toggleCollapse(); });
 
@@ -1269,7 +1260,7 @@ $$('#rec-add').addEventListener('click',()=>{
 });
 $$('#rec-gen').addEventListener('click',()=>{ generateRecurring(true); render(); });
 
-/* Shop add + Palette */
+/* Shop add + Palette add */
 const shopInput=$$('#shop-input'); const shopAddBtn=$$('#shop-add');
 if(shopInput && shopAddBtn){
   const add=()=>{ const v=(shopInput.value||'').trim(); if(!v) return; addShopItem(v); shopInput.value=''; shopInput.focus(); };
@@ -1283,15 +1274,16 @@ if(palInput && palAddBtn){
   palInput.addEventListener('keydown', e=>{ if(e.key==='Enter') addFav(); });
 }
 
-/* Init */
+/* ========== Init ========== */
 store.load();
 wireAppTitle();
-generateRecurring(true);
-rolloverIfNeeded(true);
+generateRecurring(false);           // nur 1x pro Tag automatisch
+rolloverIfNeeded(true);             // Morgen->Heute bei 00:01 (falls nötig)
 render();
 applyNotesCollapseUI();
 setInterval(()=>{ rolloverIfNeeded(false); generateRecurring(false); }, 30000);
 
+/* Demo-Seed beim ersten Start */
 if(store.tasks.length===0 && store.recs.length===0){
   addTask({title:'Beispiel Heute',column:'today'});
   addTask({title:'Beispiel Morgen',column:'tomorrow'});
