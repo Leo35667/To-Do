@@ -570,12 +570,12 @@
         .note-col.closed .note-col-body {
             display: none
         }
-        /* Neu: Bei geschlossener Notizspalte wirklich nur Kopf anzeigen */
+
         .note-col.closed {
             min-height: auto
         }
 
-        /* Einkaufsmodus: nur Einkaufsliste zeigen (ohne Schnellauswahl) */
+        /* Einkaufsmodus */
         body.shop-only .grid,
         body.shop-only #rec-panel,
         body.shop-only #notes-panel {
@@ -631,12 +631,38 @@
         .quick-add input, .shop-quick input, .notes-quick input {
             font-size: 16px
         }
+
+        /* 📱 NEU: Mobile-Layout für „Wiederholende Aufgaben“ */
+        @media (max-width:650px) {
+            #rec-controls {
+                display: flex;
+                flex-direction: column;
+                gap: 10px
+            }
+
+                #rec-controls > * {
+                    flex: 1 1 auto;
+                    width: 100%
+                }
+
+            #rec-days {
+                width: 100%;
+                justify-content: flex-start
+            }
+
+            #rec-controls .btn {
+                width: 100%
+            }
+
+            #rec-controls .select-dark, #rec-controls .input-dark {
+                width: 100%
+            }
+        }
     </style>
 </head>
 <body>
     <header>
         <div class="container">
-            <!-- 1) Überschrift bearbeitbar -->
             <h1 id="app-title" contenteditable="true" title="Titel bearbeiten">🗂️ Leo To-Do Listen</h1>
             <div class="header-actions">
                 <button id="undo-top-btn" class="icon-btn" title="Rückgängig (zuletzt entfernt)" disabled aria-label="Rückgängig">↩️</button>
@@ -657,7 +683,6 @@
         </div>
         <div class="column" data-col="soon">
             <div class="col-head"><span>Bald</span><span class="badge" id="count-soon">0</span></div>
-            <!-- 2) Hinweis (optional Datum …) entfernt -->
             <div class="quick-add"><input placeholder="Schnell hinzufügen…"><button>＋</button></div>
             <div class="tasks" id="tasks-soon"></div>
         </div>
@@ -675,7 +700,6 @@
         </div>
         <div class="panel-body" id="rec-body">
             <div class="row" id="rec-controls">
-                <!-- 3) Beispieltext entfernt -->
                 <input id="rec-title" class="input-dark" placeholder="Titel der Aufgabe" />
                 <select id="rec-freq" class="select-dark">
                     <option value="daily">Täglich</option>
@@ -884,7 +908,6 @@ function getDragAfter(container,y){
 
 /* Render */
 function render(){
-  // 1) Header-Titel anzeigen
   const titleEl=$$('#app-title'); if(titleEl) titleEl.textContent = store.appTitle;
 
   ['today','tomorrow','soon','general'].forEach(col=>{
