@@ -56,6 +56,15 @@
             gap: 10px
         }
 
+        #app-title[contenteditable="true"] {
+            outline: none;
+            border-bottom: 1px dashed transparent
+        }
+
+            #app-title[contenteditable="true"]:focus {
+                border-bottom: 1px dashed rgba(255,255,255,.35)
+            }
+
         .header-actions {
             display: flex;
             align-items: center;
@@ -561,8 +570,12 @@
         .note-col.closed .note-col-body {
             display: none
         }
+        /* Neu: Bei geschlossener Notizspalte wirklich nur Kopf anzeigen */
+        .note-col.closed {
+            min-height: auto
+        }
 
-        /* Einkaufsmodus */
+        /* Einkaufsmodus: nur Einkaufsliste zeigen (ohne Schnellauswahl) */
         body.shop-only .grid,
         body.shop-only #rec-panel,
         body.shop-only #notes-panel {
@@ -610,7 +623,7 @@
             animation: bye .28s ease-in forwards
         }
 
-        /* 🔧 iOS-Fokus-Zoom verhindern: Eingabefelder >= 16px */
+        /* iOS-Zoom verhindern */
         input, select, textarea {
             font-size: 16px
         }
@@ -623,7 +636,8 @@
 <body>
     <header>
         <div class="container">
-            <h1>🗂️ Leo To-Do Listen</h1>
+            <!-- 1) Überschrift bearbeitbar -->
+            <h1 id="app-title" contenteditable="true" title="Titel bearbeiten">🗂️ Leo To-Do Listen</h1>
             <div class="header-actions">
                 <button id="undo-top-btn" class="icon-btn" title="Rückgängig (zuletzt entfernt)" disabled aria-label="Rückgängig">↩️</button>
             </div>
@@ -643,7 +657,8 @@
         </div>
         <div class="column" data-col="soon">
             <div class="col-head"><span>Bald</span><span class="badge" id="count-soon">0</span></div>
-            <div class="quick-add"><input placeholder="Schnell hinzufügen… (optional Datum DD-MM-YYYY)"><button>＋</button></div>
+            <!-- 2) Hinweis (optional Datum …) entfernt -->
+            <div class="quick-add"><input placeholder="Schnell hinzufügen…"><button>＋</button></div>
             <div class="tasks" id="tasks-soon"></div>
         </div>
         <div class="column" data-col="general">
@@ -660,7 +675,8 @@
         </div>
         <div class="panel-body" id="rec-body">
             <div class="row" id="rec-controls">
-                <input id="rec-title" class="input-dark" placeholder="Titel der Aufgabe (z. B. Pflanzen gießen)" />
+                <!-- 3) Beispieltext entfernt -->
+                <input id="rec-title" class="input-dark" placeholder="Titel der Aufgabe" />
                 <select id="rec-freq" class="select-dark">
                     <option value="daily">Täglich</option>
                     <option value="weekly">Wöchentlich</option>
@@ -725,7 +741,7 @@ const store={
   tasks:[], recs:[], lastGenDay:'', recsCollapsed:true, lastRollover:'',
   undoStack:[], shopItems:[], shopPalette:[], shopCollapsed:true,
   notes:{ cols:[], items:[], colStates:{} }, notesCollapsed:true,
-  shopOnly:false,
+  shopOnly:false, appTitle:'',
   load(){
     try{
       this.tasks=JSON.parse(localStorage.getItem('tasks_v9')||'[]');
@@ -741,12 +757,13 @@ const store={
       this.notes = { cols: savedNotes.cols||[], items: savedNotes.items||[], colStates: savedNotes.colStates||{} };
       this.notesCollapsed=(localStorage.getItem('notes_collapsed_v1')||'true')==='true';
       this.shopOnly=(localStorage.getItem('shop_only_v1')||'false')==='true';
+      this.appTitle = localStorage.getItem('app_title_v1') || '🗂️ Leo To-Do Listen';
       ensureNotesCols(8);
     }catch(e){
       this.tasks=[]; this.recs=[]; this.recsCollapsed=true; this.lastGenDay=''; this.lastRollover='';
       this.undoStack=[]; this.shopItems=[]; this.shopPalette=[]; this.shopCollapsed=true;
       this.notes={ cols:[], items:[], colStates:{} }; ensureNotesCols(8);
-      this.notesCollapsed=true; this.shopOnly=false;
+      this.notesCollapsed=true; this.shopOnly=false; this.appTitle='🗂️ Leo To-Do Listen';
     }
   },
   save(){
@@ -762,6 +779,7 @@ const store={
     localStorage.setItem('notes_v1', JSON.stringify(this.notes));
     localStorage.setItem('notes_collapsed_v1', String(this.notesCollapsed));
     localStorage.setItem('shop_only_v1', String(this.shopOnly));
+    localStorage.setItem('app_title_v1', this.appTitle);
   }
 };
 
@@ -866,6 +884,9 @@ function getDragAfter(container,y){
 
 /* Render */
 function render(){
+  // 1) Header-Titel anzeigen
+  const titleEl=$$('#app-title'); if(titleEl) titleEl.textContent = store.appTitle;
+
   ['today','tomorrow','soon','general'].forEach(col=>{
     const list=$$('#tasks-'+col); if(!list) return; list.innerHTML='';
     store.tasks.filter(t=>t.column===col).forEach(t=>list.appendChild(taskNode(t)));
@@ -1185,6 +1206,18 @@ function applyShopOnlyUI(){
 }
 function toggleShopOnly(){ store.shopOnly = !store.shopOnly; store.save(); applyShopOnlyUI(); }
 
+/* Header-Title editing */
+function wireAppTitle(){
+  const el=$$('#app-title');
+  if(!el) return;
+  el.textContent = store.appTitle || '🗂️ Leo To-Do Listen';
+  el.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); el.blur(); } });
+  el.addEventListener('blur', ()=>{
+    store.appTitle = el.textContent.trim() || '🗂️ Meine Liste';
+    store.save();
+  });
+}
+
 /* Wiring */
 $$('#rec-toggle').addEventListener('click',toggleCollapse);
 $$('#rec-toggle-btn').addEventListener('click',e=>{ e.stopPropagation(); toggleCollapse(); });
@@ -1229,6 +1262,7 @@ if(palInput && palAddBtn){
 
 /* Init */
 store.load();
+wireAppTitle();
 generateRecurring(true);
 rolloverIfNeeded(true);
 render();
