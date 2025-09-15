@@ -203,6 +203,20 @@
             margin-left: 6px
         }
 
+        .snooze-btn {
+            border: 1px solid rgba(255,255,255,.18);
+            background: transparent;
+            color: var(--text);
+            border-radius: 8px;
+            padding: 2px 8px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+            .snooze-btn:hover {
+                border-color: rgba(255,255,255,.35)
+            }
+
         /* Panels */
         .panel {
             margin: 0 20px 30px;
@@ -341,6 +355,16 @@
             .wbtn.disabled {
                 opacity: .5;
                 pointer-events: none
+            }
+
+        .rec-ctx {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap
+        }
+
+            .rec-ctx > * {
+                flex: 1
             }
 
         /* Shopping */
@@ -579,7 +603,7 @@
             min-height: auto
         }
 
-        /* Einkaufsmodus: nur Einkaufsliste zeigen (ohne Schnellauswahl) */
+        /* Einkaufsmodus: nur Einkaufsliste (ohne Schnellauswahl) */
         body.shop-only .grid, body.shop-only #rec-panel, body.shop-only #notes-panel {
             display: none !important
         }
@@ -702,6 +726,8 @@
                 <select id="rec-freq" class="select-dark">
                     <option value="daily">Täglich</option>
                     <option value="weekly">Wöchentlich</option>
+                    <option value="biweekly">Zweiwöchentlich</option>
+                    <option value="monthly">Monatlich</option>
                 </select>
                 <div id="rec-days" class="weekday-group" aria-label="Wochentage wählen">
                     <button type="button" class="wbtn" data-day="1">Mo</button>
@@ -711,6 +737,10 @@
                     <button type="button" class="wbtn" data-day="5">Fr</button>
                     <button type="button" class="wbtn" data-day="6">Sa</button>
                     <button type="button" class="wbtn" data-day="0">So</button>
+                </div>
+                <div class="rec-ctx">
+                    <input id="rec-start" class="input-dark" type="date" />
+                    <input id="rec-monthday" class="input-dark" type="number" min="1" max="31" placeholder="Tag im Monat (1–31)" />
                 </div>
                 <button class="btn" id="rec-add">＋ Aufgabe</button>
                 <button class="btn secondary" id="rec-gen">↻ Jetzt erzeugen</button>
@@ -821,6 +851,13 @@ function ensureNotesCols(n){
   }
 }
 
+/* ===== Date helpers for recurrence ===== */
+function parseISO(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d); }
+function formatISO(d){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
+function daysBetween(a,b){ const da=parseISO(a), db=parseISO(b); const ms= db - da; return Math.floor(ms/(1000*60*60*24)); }
+function daysInMonth(dateStr){ const d=parseISO(dateStr); const y=d.getFullYear(); const m=d.getMonth(); return new Date(y, m+1, 0).getDate(); }
+function clampMonthDay(day, dateStr){ return Math.max(1, Math.min(day, daysInMonth(dateStr))); }
+
 /* ========== Tasks & UI ========== */
 function addTask({title,column,dueAt=null,templateId=null,targetDate=null}){
   if(!title || !title.trim()) return;
@@ -837,15 +874,35 @@ function animateAndThen(el, fn){
 function taskNode(task){
   const el=document.createElement('div'); el.className='task'; el.draggable=true; el.dataset.id=task.id;
   const dueTxt = task.dueAt ? ` (${task.dueAt})` : '';
-  el.innerHTML=`<input type="checkbox"> <div class="title">${escapeHtml(task.title)}</div> ${task.dueAt?`<span class='due'>${escapeHtml(dueTxt)}</span>`:''}`;
+  const snooze = task.column==='today' ? `<button class="snooze-btn" title="Auf morgen verschieben">→</button>` : '';
+  el.innerHTML=`<input type="checkbox"> <div class="title">${escapeHtml(task.title)}</div> ${task.dueAt?`<span class='due'>${escapeHtml(dueTxt)}</span>`:''} ${snooze}`;
   const cb=el.querySelector('input');
   cb.addEventListener('change',()=>{
     cb.disabled=true;
     animateAndThen(el, ()=> removeTask(task.id));
   });
+  if(snooze){
+    el.querySelector('.snooze-btn').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      moveTaskToTomorrow(task.id);
+    });
+  }
   el.addEventListener('dragstart',e=>{ el.classList.add('dragging'); e.dataTransfer.setData('text/plain',task.id); e.dataTransfer.effectAllowed='move'; });
   el.addEventListener('dragend',()=> el.classList.remove('dragging'));
   return el;
+}
+
+function moveTaskToTomorrow(id){
+  const t = store.tasks.find(x=>x.id===id);
+  if(!t) return;
+  const tmr = tomorrowStr();
+  if(t.templateId){
+    const dup = store.tasks.find(x=> x.id!==t.id && x.templateId===t.templateId && x.targetDate===tmr);
+    if(dup){ store.tasks = store.tasks.filter(x=>x.id!==dup.id); }
+    t.targetDate = tmr;
+  }
+  t.column = 'tomorrow';
+  store.save(); render();
 }
 
 function removeTask(id){
@@ -942,34 +999,78 @@ $all('.column').forEach(col=>{
   qIn.addEventListener('keydown',e=>{ if(e.key==='Enter') add(); });
 });
 
-/* ========== Recurring Templates ========== */
+/* ========== Recurring Templates (daily/weekly/biweekly/monthly) ========== */
+function isDueOn(rec, dateStr){
+  const d = parseISO(dateStr);
+  const wd = d.getDay(); // 0..6
+  switch(rec.freq){
+    case 'daily': return true;
+    case 'weekly': {
+      const days=(rec.weekdays||[]).map(Number);
+      return days.includes(wd);
+    }
+    case 'biweekly': {
+      const start = rec.startDate || todayStr();
+      const diff = daysBetween(start, dateStr);
+      return diff>=0 && diff%14===0;
+    }
+    case 'monthly': {
+      const mday = Math.max(1, Math.min(31, Number(rec.monthDay||d.getDate())));
+      const clamp = clampMonthDay(mday, dateStr);
+      return d.getDate() === clamp;
+    }
+    default: return false;
+  }
+}
+
 function renderRecs(){
   const wrap=$$('#recs'); if(!wrap) return; wrap.innerHTML='';
-  if(store.recs.length===0){ const p=document.createElement('p'); p.className='muted'; p.textContent='Noch keine Vorlagen.'; wrap.appendChild(p); return; }
+  if(store.recs.length===0){
+    const p=document.createElement('p'); p.className='muted'; p.textContent='Noch keine Vorlagen.'; wrap.appendChild(p); return;
+  }
   for(const r of store.recs){
-    const tag = r.freq==='daily' ? 'täglich' : 'wöchentlich ('+(r.weekdays||[]).map(weekdayName).join(', ')+')';
+    let tag = 'täglich';
+    if(r.freq==='weekly'){ tag = 'wöchentlich ('+(r.weekdays||[]).map(weekdayName).join(', ')+')'; }
+    else if(r.freq==='biweekly'){ tag = `zweiwöchentlich (ab ${r.startDate||todayStr()})`; }
+    else if(r.freq==='monthly'){ tag = `monatlich (Tag ${r.monthDay||'—'})`; }
+
     const el=document.createElement('div'); el.className='rec-item';
     el.innerHTML = `<div style="flex:1">${escapeHtml(r.title)} <span class="muted">• ${tag}</span></div><button class="btn" style="padding:6px 10px" title="Vorlage löschen">🗑️</button>`;
     el.querySelector('button').addEventListener('click',()=>{ removeRec(r.id); });
     wrap.appendChild(el);
   }
 }
+
 function getSelectedWeekdays(){ return [...document.querySelectorAll('#rec-days .wbtn.active')].map(b=>Number(b.dataset.day)); }
 function setDaysEnabled(enabled){ document.querySelectorAll('#rec-days .wbtn').forEach(b=> b.classList.toggle('disabled', !enabled)); }
+function applyRecFieldsVisibility(){
+  const freq = $$('#rec-freq').value;
+  const daysWrap = $$('#rec-days');
+  const start = $$('#rec-start');
+  const monthday = $$('#rec-monthday');
 
-function addRec({title,freq,weekdays=[]}){
-  const rec={id:uid(),title:title.trim(),freq,weekdays};
+  // show/hide + enable/disable
+  if(freq==='weekly'){
+    daysWrap.style.display='flex'; setDaysEnabled(true);
+  } else {
+    daysWrap.style.display='none'; setDaysEnabled(false);
+    $all('#rec-days .wbtn.active').forEach(b=>b.classList.remove('active'));
+  }
+
+  if(freq==='biweekly'){ start.style.display='block'; }
+  else { start.style.display='none'; }
+
+  if(freq==='monthly'){ monthday.style.display='block'; }
+  else { monthday.style.display='none'; }
+}
+
+function addRec({title,freq,weekdays=[],startDate=null,monthDay=null}){
+  const rec={id:uid(),title:title.trim(),freq,weekdays,startDate,monthDay};
   store.recs.push(rec);
-  const todayKey = todayStr();
-  const tomoKey  = tomorrowStr();
-  // create instances right away for today/tomorrow if due
-  if(rec.freq==='daily' || (rec.freq==='weekly' && (rec.weekdays||[]).map(Number).includes(new Date().getDay()))){
-    maybeCreateInstance(rec, todayKey);
-  }
-  const wTomorrow = (new Date().getDay()+1)%7;
-  if(rec.freq==='daily' || (rec.freq==='weekly' && (rec.weekdays||[]).map(Number).includes(wTomorrow))){
-    maybeCreateInstance(rec, tomoKey);
-  }
+  // Direkt ggf. Instanzen für heute/morgen erzeugen
+  const t = todayStr(), tm = tomorrowStr();
+  if(isDueOn(rec,t)) maybeCreateInstance(rec,t);
+  if(isDueOn(rec,tm)) maybeCreateInstance(rec,tm);
   store.save(); render(); return rec;
 }
 function removeRec(id){ store.recs=store.recs.filter(r=>r.id!==id); store.save(); renderRecs(); }
@@ -982,19 +1083,13 @@ function maybeCreateInstance(rec, targetDate){
   store.tasks.push({ id:uid(), title:rec.title, column:col, createdAt:Date.now(), templateId:rec.id, targetDate });
 }
 function generateRecurring(force=false){
-  const today = new Date(); const todayKey=todayStr(); const tomoKey=tomorrowStr();
-  if(force || store.lastGenDay!==todayKey){
+  const today = todayStr(); const tomo = tomorrowStr();
+  if(force || store.lastGenDay!==today){
     for(const r of store.recs){
-      if(r.freq==='daily'){
-        maybeCreateInstance(r, todayKey); maybeCreateInstance(r, tomoKey);
-      } else if(r.freq==='weekly'){
-        const w=weekday(today); const days=(r.weekdays||[]).map(Number);
-        const wTomorrow = (w+1)%7;
-        if(days.includes(w)) maybeCreateInstance(r, todayKey);
-        if(days.includes(wTomorrow)) maybeCreateInstance(r, tomoKey);
-      }
+      if(isDueOn(r, today)) maybeCreateInstance(r, today);
+      if(isDueOn(r, tomo))  maybeCreateInstance(r, tomo);
     }
-    store.lastGenDay=todayKey; store.save();
+    store.lastGenDay=today; store.save();
   }
 }
 
@@ -1006,7 +1101,9 @@ function rolloverIfNeeded(force){
   const eligible = force || minutes >= 1; // ab 00:01
   if(eligible && store.lastRollover !== todayKey){
     let moved = 0;
-    for(const t of store.tasks){ if(t.column==='tomorrow'){ t.column='today'; moved++; } }
+    for(const t of store.tasks){
+      if(t.column==='tomorrow'){ t.column='today'; moved++; }
+    }
     if(moved>0){ store.save(); render(); }
     store.lastRollover = todayKey; store.save();
   }
@@ -1246,18 +1343,44 @@ $$('#notes-toggle-btn').addEventListener('click', e=>{ e.stopPropagation(); togg
 $$('#undo-top-btn').addEventListener('click', undoRemove);
 
 /* Rec-UI */
-$$('#rec-freq').addEventListener('change', ()=>{ setDaysEnabled($$('#rec-freq').value === 'weekly'); });
-setDaysEnabled($$('#rec-freq').value === 'weekly');
+function recSetDefaultsUI(){
+  const start=$$('#rec-start'); const monthday=$$('#rec-monthday');
+  start.value = todayStr();
+  monthday.value = String(new Date().getDate());
+}
+recSetDefaultsUI();
+
+$$('#rec-freq').addEventListener('change', ()=>{
+  applyRecFieldsVisibility();
+});
+applyRecFieldsVisibility();
+
 $all('#rec-days .wbtn').forEach(btn=>{ btn.addEventListener('click', ()=> btn.classList.toggle('active')); });
 
 $$('#rec-add').addEventListener('click',()=>{
   const title=($$('#rec-title').value||'').trim(); if(!title){ alert('Bitte Titel eingeben'); return; }
   const freq=$$('#rec-freq').value;
-  const days = freq==='weekly' ? getSelectedWeekdays() : [];
-  if(freq==='weekly' && days.length===0){ alert('Bitte mindestens einen Wochentag wählen.'); return; }
-  addRec({title,freq,weekdays:days});
-  $$('#rec-title').value=''; $all('#rec-days .wbtn.active').forEach(b=>b.classList.remove('active'));
+  let days=[]; let start=null; let mday=null;
+
+  if(freq==='weekly'){
+    days = getSelectedWeekdays();
+    if(days.length===0){ alert('Bitte mindestens einen Wochentag wählen.'); return; }
+  } else if(freq==='biweekly'){
+    start = $$('#rec-start').value || todayStr();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(start)){ alert('Bitte ein gültiges Startdatum wählen.'); return; }
+  } else if(freq==='monthly'){
+    const raw = Number($$('#rec-monthday').value||new Date().getDate());
+    if(!(raw>=1 && raw<=31)){ alert('Bitte einen Tag zwischen 1 und 31 angeben.'); return; }
+    mday = raw;
+  }
+
+  addRec({title,freq,weekdays:days,startDate:start,monthDay:mday});
+  // Reset Eingaben
+  $$('#rec-title').value='';
+  $all('#rec-days .wbtn.active').forEach(b=>b.classList.remove('active'));
+  recSetDefaultsUI();
 });
+
 $$('#rec-gen').addEventListener('click',()=>{ generateRecurring(true); render(); });
 
 /* Shop add + Palette add */
@@ -1274,11 +1397,11 @@ if(palInput && palAddBtn){
   palInput.addEventListener('keydown', e=>{ if(e.key==='Enter') addFav(); });
 }
 
-/* ========== Init ========== */
+/* ========== Init (Reihenfolge wichtig) ========== */
 store.load();
 wireAppTitle();
-generateRecurring(false);           // nur 1x pro Tag automatisch
-rolloverIfNeeded(true);             // Morgen->Heute bei 00:01 (falls nötig)
+rolloverIfNeeded(true);            // 1) Rollover zuerst
+generateRecurring(false);          // 2) dann fällige Instanzen (heute & morgen)
 render();
 applyNotesCollapseUI();
 setInterval(()=>{ rolloverIfNeeded(false); generateRecurring(false); }, 30000);
