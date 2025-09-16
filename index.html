@@ -79,22 +79,17 @@
             height: 36px;
             border-radius: 10px;
             border: 1px solid rgba(255,255,255,.12);
-            background: var(--card);
-            color: var(--text);
+            background: linear-gradient(180deg,var(--accent),#3b82f6);
+            color: #061527;
             cursor: pointer;
             font-size: 18px;
             line-height: 1
         }
 
-            .icon-btn.active {
-                background: linear-gradient(180deg,var(--accent),#3b82f6);
-                border-color: transparent;
-                color: #061527;
-            }
-
             .icon-btn[disabled] {
                 opacity: .45;
-                cursor: not-allowed
+                cursor: not-allowed;
+                filter: grayscale(1)
             }
 
         /* Board */
@@ -472,55 +467,47 @@
 
         /* Notes panel */
         .notes-grid {
-            display: grid;
-            gap: 16px;
-            grid-template-columns: repeat(4,1fr)
-        }
-
-        @media (max-width:1100px) {
-            .notes-grid {
-                grid-template-columns: repeat(2,1fr)
-            }
-        }
-
-        @media (max-width:650px) {
-            .notes-grid {
-                grid-template-columns: 1fr
-            }
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px
         }
 
         .note-column {
+            flex: 1 1 260px;
             background: rgba(255,255,255,.05);
             border-radius: var(--radius);
             box-shadow: var(--shadow);
             display: flex;
-            flex-direction: column;
-            min-height: 160px
+            flex-direction: column
         }
+
+            .note-column.dragging {
+                opacity: .6
+            }
 
         .note-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
             font-weight: 700;
-            padding: 12px 14px;
-            border-bottom: 1px solid rgba(255,255,255,.08)
+            padding: 12px 14px
         }
 
         .note-title[contenteditable="true"] {
-            outline: none;
-            border-bottom: 1px dashed transparent
+            outline: none
         }
 
-            .note-title[contenteditable="true"]:focus {
-                border-bottom: 1px dashed rgba(255,255,255,.35)
-            }
+        .note-tools {
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
 
         .notes-quick {
             display: flex;
             gap: 8px;
             padding: 10px;
-            border-bottom: 1px dashed rgba(255,255,255,.08)
+            border-top: 1px dashed rgba(255,255,255,.08)
         }
 
             .notes-quick input {
@@ -576,7 +563,6 @@
             border: none;
             border-radius: 999px;
             background: rgba(255,255,255,.12);
-            color: #061527;
             cursor: pointer
         }
 
@@ -590,17 +576,35 @@
         .note-col.open .note-toggle::before {
             content: '▾'
         }
-
-        .note-col-body {
-            display: block
-        }
-
-        .note-col.closed .note-col-body {
+        /* Einklappen: kein Body, keine Linie/Abstände */
+        .note-col.closed .notes-quick,
+        .note-col.closed .notes-items {
             display: none
         }
 
         .note-col.closed {
-            min-height: auto
+            padding-bottom: 0
+        }
+
+        .note-delete {
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 16px;
+            margin-left: 6px
+        }
+
+        .add-note-btn {
+            margin-top: 12px;
+            border: none;
+            border-radius: 10px;
+            padding: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            color: #061527;
+            background: linear-gradient(180deg,var(--accent),#3b82f6);
+            width: 100%
         }
 
         /* Einkaufsmodus: nur Einkaufsliste (ohne Schnellauswahl) */
@@ -618,10 +622,6 @@
 
         body.shop-only .shop-palette-box {
             display: none !important
-        }
-
-        body.shop-only #toggle-shop-only {
-            background: linear-gradient(180deg,#6ee7b7,var(--accent-2))
         }
 
         /* Entfernen-Animation */
@@ -781,6 +781,7 @@
         </div>
         <div class="panel-body" id="notes-body">
             <div class="notes-grid" id="notes-grid"></div>
+            <button class="add-note-btn" id="add-note-col">＋ Notizblock</button>
         </div>
     </section>
 
@@ -808,17 +809,20 @@ const store={
       this.shopItems=JSON.parse(localStorage.getItem('shop_items_v1')||'[]');
       this.shopPalette=JSON.parse(localStorage.getItem('shop_palette_v1')||'[]');
       this.shopCollapsed=(localStorage.getItem('shop_collapsed_v1')||'true')==='true';
-      const savedNotes=JSON.parse(localStorage.getItem('notes_v1')||'{"cols":[],"items":[]}');
+      const savedNotes=JSON.parse(localStorage.getItem('notes_v2')||'{"cols":[],"items":[],"colStates":{}}');
       this.notes = { cols: savedNotes.cols||[], items: savedNotes.items||[], colStates: savedNotes.colStates||{} };
       this.notesCollapsed=(localStorage.getItem('notes_collapsed_v1')||'true')==='true';
       this.shopOnly=(localStorage.getItem('shop_only_v1')||'false')==='true';
       this.appTitle = localStorage.getItem('app_title_v1') || '🗂️ Leo To-Do Listen';
-      ensureNotesCols(8);
+      if(!Array.isArray(this.notes.cols)) this.notes.cols=[];
+      if(!this.notes.colStates) this.notes.colStates={};
+      if(this.notes.cols.length===0){ addNoteColumn('Notizen 1'); addNoteColumn('Notizen 2'); addNoteColumn('Notizen 3'); addNoteColumn('Notizen 4'); }
     }catch(e){
       this.tasks=[]; this.recs=[]; this.recsCollapsed=true; this.lastGenDay=''; this.lastRollover='';
       this.undoStack=[]; this.shopItems=[]; this.shopPalette=[]; this.shopCollapsed=true;
-      this.notes={ cols:[], items:[], colStates:{} }; ensureNotesCols(8);
+      this.notes={ cols:[], items:[], colStates:{} };
       this.notesCollapsed=true; this.shopOnly=false; this.appTitle='🗂️ Leo To-Do Listen';
+      addNoteColumn('Notizen 1'); addNoteColumn('Notizen 2'); addNoteColumn('Notizen 3'); addNoteColumn('Notizen 4');
     }
   },
   save(){
@@ -831,7 +835,7 @@ const store={
     localStorage.setItem('shop_items_v1', JSON.stringify(this.shopItems));
     localStorage.setItem('shop_palette_v1', JSON.stringify(this.shopPalette));
     localStorage.setItem('shop_collapsed_v1', String(this.shopCollapsed));
-    localStorage.setItem('notes_v1', JSON.stringify(this.notes));
+    localStorage.setItem('notes_v2', JSON.stringify(this.notes));
     localStorage.setItem('notes_collapsed_v1', String(this.notesCollapsed));
     localStorage.setItem('shop_only_v1', String(this.shopOnly));
     localStorage.setItem('app_title_v1', this.appTitle);
@@ -840,16 +844,6 @@ const store={
 
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 function escapeHtml(s){ return String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c])); }
-function ensureNotesCols(n){
-  if(!store.notes || !Array.isArray(store.notes.cols)) store.notes={cols:[],items:[],colStates:{}};
-  const count = store.notes.cols.length;
-  for(let i=count+1;i<=n;i++){
-    const id=uid();
-    store.notes.cols.push({id, title:'Notizen '+i});
-    if(!store.notes.colStates) store.notes.colStates={};
-    store.notes.colStates[id] = {collapsed:false};
-  }
-}
 
 /* ===== Date helpers for recurrence ===== */
 function parseISO(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d); }
@@ -864,13 +858,11 @@ function addTask({title,column,dueAt=null,templateId=null,targetDate=null}){
   store.tasks.push({id:uid(),title:title.trim(),column,createdAt:Date.now(),dueAt,templateId,targetDate});
   store.save(); render();
 }
-
 function animateAndThen(el, fn){
   if(!el){ fn(); return; }
   el.classList.add('flash-remove');
   el.addEventListener('animationend', ()=> fn(), {once:true});
 }
-
 function taskNode(task){
   const el=document.createElement('div'); el.className='task'; el.draggable=true; el.dataset.id=task.id;
   const dueTxt = task.dueAt ? ` (${task.dueAt})` : '';
@@ -891,7 +883,6 @@ function taskNode(task){
   el.addEventListener('dragend',()=> el.classList.remove('dragging'));
   return el;
 }
-
 function moveTaskToTomorrow(id){
   const t = store.tasks.find(x=>x.id===id);
   if(!t) return;
@@ -904,7 +895,6 @@ function moveTaskToTomorrow(id){
   t.column = 'tomorrow';
   store.save(); render();
 }
-
 function removeTask(id){
   const idx = store.tasks.findIndex(t=>t.id===id);
   if(idx>-1){
@@ -914,7 +904,6 @@ function removeTask(id){
     store.save(); render();
   }
 }
-
 function undoRemove(){
   const entry=store.undoStack.pop();
   if(!entry) return;
@@ -924,16 +913,13 @@ function undoRemove(){
   else if(entry.kind==='shop'){ store.shopItems.push(entry.item); }
   store.save(); render();
 }
-
 function updateUndoUI(){
-  const btn=$$('#undo-top-btn');
-  if(!btn) return;
+  const btn=$$('#undo-top-btn'); if(!btn) return;
   const hasUndo = store.undoStack.length>0;
   btn.disabled = !hasUndo;
-  btn.classList.toggle('active', hasUndo);
 }
 
-/* Drag & Drop for task columns */
+/* Drag & Drop Tasks */
 function makeSortable(list,col){
   list.addEventListener('dragover',e=>{
     e.preventDefault();
@@ -954,7 +940,7 @@ function makeSortable(list,col){
   });
 }
 function getDragAfter(container,y){
-  const els=[...container.querySelectorAll('.task:not(.dragging), .shop-item:not(.dragging), .note-item:not(.dragging)')];
+  const els=[...container.querySelectorAll('.task:not(.dragging), .shop-item:not(.dragging), .note-item:not(.dragging), .note-column:not(.dragging)')];
   let closest=null; let closestOffset=Number.NEGATIVE_INFINITY;
   for(const el of els){
     const box=el.getBoundingClientRect(); const offset=y - box.top - box.height/2;
@@ -1022,7 +1008,6 @@ function isDueOn(rec, dateStr){
     default: return false;
   }
 }
-
 function renderRecs(){
   const wrap=$$('#recs'); if(!wrap) return; wrap.innerHTML='';
   if(store.recs.length===0){
@@ -1040,7 +1025,6 @@ function renderRecs(){
     wrap.appendChild(el);
   }
 }
-
 function getSelectedWeekdays(){ return [...document.querySelectorAll('#rec-days .wbtn.active')].map(b=>Number(b.dataset.day)); }
 function setDaysEnabled(enabled){ document.querySelectorAll('#rec-days .wbtn').forEach(b=> b.classList.toggle('disabled', !enabled)); }
 function applyRecFieldsVisibility(){
@@ -1049,25 +1033,15 @@ function applyRecFieldsVisibility(){
   const start = $$('#rec-start');
   const monthday = $$('#rec-monthday');
 
-  // show/hide + enable/disable
-  if(freq==='weekly'){
-    daysWrap.style.display='flex'; setDaysEnabled(true);
-  } else {
-    daysWrap.style.display='none'; setDaysEnabled(false);
-    $all('#rec-days .wbtn.active').forEach(b=>b.classList.remove('active'));
-  }
+  if(freq==='weekly'){ daysWrap.style.display='flex'; setDaysEnabled(true); }
+  else { daysWrap.style.display='none'; setDaysEnabled(false); $all('#rec-days .wbtn.active').forEach(b=>b.classList.remove('active')); }
 
-  if(freq==='biweekly'){ start.style.display='block'; }
-  else { start.style.display='none'; }
-
-  if(freq==='monthly'){ monthday.style.display='block'; }
-  else { monthday.style.display='none'; }
+  start.style.display = (freq==='biweekly') ? 'block' : 'none';
+  monthday.style.display = (freq==='monthly') ? 'block' : 'none';
 }
-
 function addRec({title,freq,weekdays=[],startDate=null,monthDay=null}){
   const rec={id:uid(),title:title.trim(),freq,weekdays,startDate,monthDay};
   store.recs.push(rec);
-  // Direkt ggf. Instanzen für heute/morgen erzeugen
   const t = todayStr(), tm = tomorrowStr();
   if(isDueOn(rec,t)) maybeCreateInstance(rec,t);
   if(isDueOn(rec,tm)) maybeCreateInstance(rec,tm);
@@ -1075,7 +1049,6 @@ function addRec({title,freq,weekdays=[],startDate=null,monthDay=null}){
 }
 function removeRec(id){ store.recs=store.recs.filter(r=>r.id!==id); store.save(); renderRecs(); }
 function weekdayName(n){ return ['So','Mo','Di','Mi','Do','Fr','Sa'][n]; }
-
 function maybeCreateInstance(rec, targetDate){
   const exists = store.tasks.some(t=> t.templateId===rec.id && t.targetDate===targetDate);
   if(exists) return;
@@ -1187,47 +1160,81 @@ function makeSortablePalette(container){
   });
 }
 
-/* ========== Notes (8 Spalten) ========== */
+/* ========== Notes: dynamic columns (add/delete/reorder) + items dnd ========== */
+function addNoteColumn(title='Neue Notizen'){
+  const id=uid();
+  if(!store.notes.cols) store.notes.cols=[];
+  if(!store.notes.colStates) store.notes.colStates={};
+  store.notes.cols.push({id,title});
+  store.notes.colStates[id]={collapsed:false};
+  store.save();
+}
 function renderNotes(){
   const grid=$$('#notes-grid'); if(!grid) return;
   grid.innerHTML='';
+  // Render columns
   for(const col of store.notes.cols){
     const colState = (store.notes.colStates && store.notes.colStates[col.id]) || {collapsed:false};
     const wrap=document.createElement('div');
-    wrap.className='note-column note-col ' + (colState.collapsed ? 'closed' : 'open');
+    wrap.className='note-column note-col '+(colState.collapsed?'closed':'open');
     wrap.dataset.col=col.id;
+    wrap.draggable=true;
     wrap.innerHTML = `
       <div class="note-head">
         <span class="note-title" contenteditable="true" data-col="${col.id}" title="Titel bearbeiten">${escapeHtml(col.title)}</span>
-        <div style="display:flex;align-items:center;gap:8px">
+        <div class="note-tools">
           <span class="badge">${store.notes.items.filter(i=>i.colId===col.id).length}</span>
-          <button class="note-toggle" title="Spalte umschalten" aria-label="Spalte umschalten"></button>
+          <button class="note-toggle" title="Spalte ein-/ausklappen" aria-label="Spalte umschalten"></button>
+          <button class="note-delete" title="Spalte löschen">🗑️</button>
         </div>
       </div>
-      <div class="note-col-body">
-        <div class="notes-quick">
-          <input placeholder="Notiz hinzufügen…" data-col="${col.id}">
-          <button data-col="${col.id}">＋</button>
-        </div>
-        <div class="notes-items" id="notes-items-${col.id}"></div>
+      <div class="notes-quick">
+        <input placeholder="Notiz hinzufügen…" data-col="${col.id}">
+        <button data-col="${col.id}">＋</button>
       </div>
+      <div class="notes-items" id="notes-items-${col.id}"></div>
     `;
     grid.appendChild(wrap);
 
-    const tbtn = wrap.querySelector('.note-toggle');
-    tbtn.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      const current = !!(store.notes.colStates && store.notes.colStates[col.id] && store.notes.colStates[col.id].collapsed);
-      if(!store.notes.colStates) store.notes.colStates={};
-      store.notes.colStates[col.id] = {collapsed: !current};
-      store.save();
-      renderNotes();
+    // Column dnd
+    wrap.addEventListener('dragstart',()=> wrap.classList.add('dragging'));
+    wrap.addEventListener('dragend',()=>{ wrap.classList.remove('dragging'); updateNoteColumnsOrder(); });
+
+    grid.addEventListener('dragover', e=>{
+      const dragging=document.querySelector('.note-column.dragging'); if(!dragging) return;
+      e.preventDefault();
+      const after=getDragAfter(grid,e.clientY);
+      if(after==null) grid.appendChild(dragging); else grid.insertBefore(dragging, after);
     });
 
-    const list = wrap.querySelector('.notes-items');
-    store.notes.items.filter(i=>i.colId===col.id).forEach(it=> list.appendChild(noteItemNode(it)) );
-    makeSortableNotes(list, col.id);
+    // Toggle
+    wrap.querySelector('.note-toggle').addEventListener('click', e=>{
+      e.stopPropagation();
+      const current = !!(store.notes.colStates && store.notes.colStates[col.id] && store.notes.colStates[col.id].collapsed);
+      store.notes.colStates[col.id] = {collapsed: !current};
+      store.save(); renderNotes();
+    });
 
+    // Delete column
+    wrap.querySelector('.note-delete').addEventListener('click', e=>{
+      e.stopPropagation();
+      if(!confirm('Diesen Notizblock samt Inhalt löschen?')) return;
+      store.notes.cols = store.notes.cols.filter(c=>c.id!==col.id);
+      store.notes.items = store.notes.items.filter(i=>i.colId!==col.id);
+      delete store.notes.colStates[col.id];
+      store.save(); renderNotes();
+    });
+
+    // Title edit
+    const titleEl = wrap.querySelector('.note-title');
+    titleEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); titleEl.blur(); } });
+    titleEl.addEventListener('blur', ()=>{
+      const t = titleEl.textContent.trim() || 'Unbenannt';
+      const c = store.notes.cols.find(c=>c.id===col.id);
+      if(c){ c.title = t; store.save(); }
+    });
+
+    // Add note item
     const inEl = wrap.querySelector('.notes-quick input');
     const btnEl = wrap.querySelector('.notes-quick button');
     const addNote = ()=>{
@@ -1239,14 +1246,16 @@ function renderNotes(){
     btnEl.addEventListener('click', addNote);
     inEl.addEventListener('keydown', e=>{ if(e.key==='Enter') addNote(); });
 
-    const titleEl = wrap.querySelector('.note-title');
-    titleEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); titleEl.blur(); } });
-    titleEl.addEventListener('blur', ()=>{
-      const t = titleEl.textContent.trim() || 'Unbenannt';
-      const c = store.notes.cols.find(c=>c.id===col.id);
-      if(c){ c.title = t; store.save(); }
-    });
+    // Render items
+    const list = wrap.querySelector('.notes-items');
+    store.notes.items.filter(i=>i.colId===col.id).forEach(it=> list.appendChild(noteItemNode(it)) );
+    makeSortableNotes(list, col.id);
   }
+}
+function updateNoteColumnsOrder(){
+  const ids=[...document.querySelectorAll('.note-column')].map(c=>c.dataset.col);
+  store.notes.cols=ids.map(id=>store.notes.cols.find(c=>c.id===id)).filter(Boolean);
+  store.save();
 }
 function noteItemNode(it){
   const el=document.createElement('div'); el.className='note-item'; el.draggable=true; el.dataset.id=it.id;
@@ -1291,14 +1300,12 @@ function applyCollapseUI(){
   else { panel.classList.add('open'); body.style.display='block'; }
 }
 function toggleCollapse(){ store.recsCollapsed=!store.recsCollapsed; store.save(); applyCollapseUI(); }
-
 function applyShopCollapseUI(){
   const panel=$$('#shop-panel'); const body=$$('#shop-body');
   if(store.shopCollapsed){ panel.classList.remove('open'); body.style.display='none'; }
   else { panel.classList.add('open'); body.style.display='block'; }
 }
 function toggleShopCollapse(){ store.shopCollapsed=!store.shopCollapsed; store.save(); applyShopCollapseUI(); }
-
 function applyNotesCollapseUI(){
   const panel=$$('#notes-panel'); const body=$$('#notes-body');
   if(store.notesCollapsed){ panel.classList.remove('open'); body.style.display='none'; }
@@ -1342,6 +1349,16 @@ $$('#notes-toggle-btn').addEventListener('click', e=>{ e.stopPropagation(); togg
 
 $$('#undo-top-btn').addEventListener('click', undoRemove);
 
+        // Notizblock hinzufügen (Button unter dem Notizboard)
+        const addNoteBtn = document.querySelector('#add-note-col');
+        if (addNoteBtn) {
+            addNoteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                addNoteColumn('Neue Notizen'); // legt Spalte an und speichert
+                renderNotes();                 // UI neu zeichnen
+            });
+        }
+
 /* Rec-UI */
 function recSetDefaultsUI(){
   const start=$$('#rec-start'); const monthday=$$('#rec-monthday');
@@ -1349,12 +1366,8 @@ function recSetDefaultsUI(){
   monthday.value = String(new Date().getDate());
 }
 recSetDefaultsUI();
-
-$$('#rec-freq').addEventListener('change', ()=>{
-  applyRecFieldsVisibility();
-});
+$$('#rec-freq').addEventListener('change', ()=>{ applyRecFieldsVisibility(); });
 applyRecFieldsVisibility();
-
 $all('#rec-days .wbtn').forEach(btn=>{ btn.addEventListener('click', ()=> btn.classList.toggle('active')); });
 
 $$('#rec-add').addEventListener('click',()=>{
@@ -1375,12 +1388,10 @@ $$('#rec-add').addEventListener('click',()=>{
   }
 
   addRec({title,freq,weekdays:days,startDate:start,monthDay:mday});
-  // Reset Eingaben
   $$('#rec-title').value='';
   $all('#rec-days .wbtn.active').forEach(b=>b.classList.remove('active'));
   recSetDefaultsUI();
 });
-
 $$('#rec-gen').addEventListener('click',()=>{ generateRecurring(true); render(); });
 
 /* Shop add + Palette add */
